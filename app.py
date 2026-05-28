@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import datetime
-import requests
 import json
 
 st.set_page_config(page_title="Tankstelle Schichtplan", layout="centered")
@@ -19,38 +18,14 @@ mitarbeiter = [
 ]
 shifts = ["Frühschicht", "Spätschicht"]
 
-# 🔒 PERMANENT CLOUD STORAGE CONFIGURATION
-# TODO: Ersetze das Wort unten mit deiner kopierten Gist-ID!
-GIST_ID = "DEIN_GIST_ID_HIER"
-GIST_URL = f"https://api.github.com/gists/{GIST_ID}"
+# 📂 SECURITY SAFE SYSTEM: Load database data directly from Streamlit Secrets
+app_data = {"daily_announcement": "", "shifts": {}}
 
-def load_all_data():
+if "SAVED_DATA" in st.secrets:
     try:
-        response = requests.get(GIST_URL)
-        if response.status_code == 200:
-            gist_data = response.json()
-            file_content = gist_data["files"]["schichtplan_data.json"]["content"]
-            return json.loads(file_content)
+        app_data = json.loads(st.secrets["SAVED_DATA"])
     except Exception:
-        pass
-    return {"daily_announcement": "", "shifts": {}}
-
-def save_all_data(data):
-    try:
-        payload = {
-            "files": {
-                "schichtplan_data.json": {
-                    "content": json.dumps(data)
-                }
-            }
-        }
-        # We send it directly over the public web requests
-        requests.patch(GIST_URL, json=payload)
-    except Exception:
-        pass
-
-# Initialize and load data from the internet storage cloud
-app_data = load_all_data()
+        st.error("⚠️ Fehler beim Laden der Daten aus den App-Secrets. Bitte TOML Format prüfen.")
 
 # Display announcement banner
 current_announcement = app_data.get("daily_announcement", "")
@@ -124,15 +99,22 @@ if st.session_state.is_logged_in:
                 s_select = st.selectbox(f"Spät", mitarbeiter, index=mitarbeiter.index(current_s) if current_s in mitarbeiter else 0, key=f"{day}_s")
             updated_shifts[day] = [f_select, s_select]
 
-        if st.form_submit_button("Änderungen online speichern"):
+        if st.form_submit_button("Änderungscode generieren"):
             app_data["daily_announcement"] = new_announcement
             if "shifts" not in app_data:
                 app_data["shifts"] = {}
             app_data["shifts"][week_key] = updated_shifts
 
-            save_all_data(app_data)
-            st.toast("Erfolgreich gespeichert! 💾")
+            # Put the updated payload inside session state to show Marcus
+            st.session_state["generated_code"] = json.dumps(app_data)
             st.rerun()
+
+    # If Marcus just clicked save, show him the exact block to put into image_2.png
+    if "generated_code" in st.session_state:
+        st.success("✅ Code erfolgreich generiert! Kopiere den gesamten Inhalt aus dem Feld unten:")
+        toml_string = f"SAVED_DATA = '''{st.session_state['generated_code']}'''"
+        st.text_area("Hier kopieren:", value=toml_string, height=150)
+        st.info("💡 Gehe jetzt in deine App-Einstellungen (Secrets) auf Streamlit, lösche den alten Text, füge diesen hier ein und drücke auf Save!")
 
 # Public Display
 st.write(f"## 📋 Schichtplan für die Woche vom {selected_monday.strftime('%d.%m.%Y')}")
