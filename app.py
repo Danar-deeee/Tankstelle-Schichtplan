@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import datetime
 import json
+import os
 
 st.set_page_config(page_title="Tankstelle Schichtplan", layout="centered")
 st.title("⛽ Tankstelle Schichtplan")
@@ -18,14 +19,24 @@ mitarbeiter = [
 ]
 shifts = ["Frühschicht", "Spätschicht"]
 
-# 📂 SECURITY SAFE SYSTEM: Load database data directly from Streamlit Secrets
-app_data = {"daily_announcement": "", "shifts": {}}
+# INTERNAL DATA STORAGE (Bypasses Streamlit's missing menus!)
+DATA_FILE = "schichtplan_data.json"
 
-if "SAVED_DATA" in st.secrets:
-    try:
-        app_data = json.loads(st.secrets["SAVED_DATA"])
-    except Exception:
-        st.error("⚠️ Fehler beim Laden der Daten aus den App-Secrets. Bitte TOML Format prüfen.")
+def load_all_data():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"daily_announcement": "", "shifts": {}}
+
+def save_all_data(data):
+    with open(DATA_FILE, "w") as f:
+        json.dump(data, f)
+
+# Initialize and load data
+app_data = load_all_data()
 
 # Display announcement banner
 current_announcement = app_data.get("daily_announcement", "")
@@ -99,22 +110,15 @@ if st.session_state.is_logged_in:
                 s_select = st.selectbox(f"Spät", mitarbeiter, index=mitarbeiter.index(current_s) if current_s in mitarbeiter else 0, key=f"{day}_s")
             updated_shifts[day] = [f_select, s_select]
 
-        if st.form_submit_button("Änderungscode generieren"):
+        if st.form_submit_button("Änderungen online speichern"):
             app_data["daily_announcement"] = new_announcement
             if "shifts" not in app_data:
                 app_data["shifts"] = {}
             app_data["shifts"][week_key] = updated_shifts
 
-            # Put the updated payload inside session state to show Marcus
-            st.session_state["generated_code"] = json.dumps(app_data)
+            save_all_data(app_data)
+            st.toast("Erfolgreich gespeichert! 💾")
             st.rerun()
-
-    # If Marcus just clicked save, show him the exact block to put into image_2.png
-    if "generated_code" in st.session_state:
-        st.success("✅ Code erfolgreich generiert! Kopiere den gesamten Inhalt aus dem Feld unten:")
-        toml_string = f"SAVED_DATA = '''{st.session_state['generated_code']}'''"
-        st.text_area("Hier kopieren:", value=toml_string, height=150)
-        st.info("💡 Gehe jetzt in deine App-Einstellungen (Secrets) auf Streamlit, lösche den alten Text, füge diesen hier ein und drücke auf Save!")
 
 # Public Display
 st.write(f"## 📋 Schichtplan für die Woche vom {selected_monday.strftime('%d.%m.%Y')}")
