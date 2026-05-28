@@ -5,6 +5,7 @@ import datetime
 st.set_page_config(page_title="Tankstelle Schichtplan", layout="centered")
 st.title("⛽ Tankstelle Schichtplan")
 
+# REMOVED YOUR NAME FROM THE TEAM LIST
 mitarbeiter = [
     "Frei/offen",
     "Marcus",
@@ -13,8 +14,7 @@ mitarbeiter = [
     "Ecaterina Murzacova",
     "Sabine Fischer",
     "zicke",
-    "Christina",
-    "Blbas Danar"
+    "Christina"
 ]
 shifts = ["Frühschicht", "Spätschicht"]
 
@@ -31,7 +31,7 @@ try:
 except Exception:
     pass
 
-# 2. FETCH DAILY ANNOUNCEMENT (Shows at the very top of the app)
+# 2. FETCH DAILY ANNOUNCEMENT
 announcement_key = "daily_announcement"
 current_announcement = ""
 
@@ -43,9 +43,17 @@ if db_online is not None:
 else:
     current_announcement = st.session_state.local_fallback_db.get(announcement_key, "")
 
-# Display the announcement as a nice colored alert header if it exists
+# Display announcement with red German header
 if current_announcement:
-    st.info(f"📢 **Wichtige Mitteilung:**\n\n{current_announcement}")
+    st.markdown(
+        f"""
+        <div style="background-color: #f8d7da; padding: 15px; border-radius: 5px; border-left: 5px solid #dc3545; margin-bottom: 20px;">
+            <p style="color: #dc3545; font-weight: bold; margin: 0 0 10px 0; font-size: 18px;">📢 WICHTIGE MITTEILUNG:</p>
+            <p style="color: #111111; margin: 0; white-space: pre-wrap;">{current_announcement}</p>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
 
 # 3. WEEK SELECTION
 today = datetime.date.today()
@@ -80,7 +88,7 @@ else:
     df = pd.DataFrame.from_dict(saved_data, orient="index", columns=shifts)
     df.index = date_strings
 
-# 5. ACCESS CONTROL SIDEBAR (Login / Logout)
+# 5. ACCESS CONTROL SIDEBAR (Only Marcus and Mitarbeiter)
 with st.sidebar:
     st.header("🔑 Admin Area")
     if st.session_state.is_logged_in:
@@ -89,13 +97,11 @@ with st.sidebar:
             st.session_state.is_logged_in = False
             st.rerun()
     else:
-        user_role = st.selectbox("Wer bist du?", ["Mitarbeiter (Nur Anschauen)", "Marcus (Manager)", "Blbas Danar"])
+        user_role = st.selectbox("Wer bist du?", ["Mitarbeiter (Nur Anschauen)", "Marcus (Manager)"])
         password = st.text_input("Passwort eingeben", type="password")
 
+        # ONLY MARCUS CAN LOG IN NOW
         if user_role == "Marcus (Manager)" and password == "Tiger2026":
-            st.session_state.is_logged_in = True
-            st.rerun()
-        elif user_role == "Blbas Danar" and password == "dany_de":
             st.session_state.is_logged_in = True
             st.rerun()
 
@@ -104,8 +110,7 @@ if st.session_state.is_logged_in:
     st.markdown("---")
     st.subheader("🛠️ Admin-Optionen")
 
-    # Text area for Marcus to change the announcement board
-    new_announcement = st.text_area("📢 Ankündigung für das Team bearbeiten:", value=current_announcement)
+    new_announcement = st.text_area("📢 Ankündigung für das Team bearbeiten (Deutsch):", value=current_announcement)
 
     with st.form("schicht_form"):
         st.write(f"### Schichten bearbeiten für: {selected_monday.strftime('%d.%m.%Y')}")
