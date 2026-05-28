@@ -1,8 +1,8 @@
 import streamlit as st
 import pandas as pd
 import datetime
+import requests
 import json
-import os
 
 st.set_page_config(page_title="Tankstelle Schichtplan", layout="centered")
 st.title("⛽ Tankstelle Schichtplan")
@@ -19,23 +19,37 @@ mitarbeiter = [
 ]
 shifts = ["Frühschicht", "Spätschicht"]
 
-# INTERNAL DATA STORAGE (Bypasses Streamlit's missing menus!)
-DATA_FILE = "schichtplan_data.json"
+# 🔒 PERMANENT CLOUD STORAGE CONFIGURATION
+# TODO: Ersetze das Wort unten mit deiner kopierten Gist-ID!
+GIST_ID = "DEIN_GIST_ID_HIER"
+GIST_URL = f"https://api.github.com/gists/{GIST_ID}"
 
 def load_all_data():
-    if os.path.exists(DATA_FILE):
-        try:
-            with open(DATA_FILE, "r") as f:
-                return json.load(f)
-        except Exception:
-            pass
+    try:
+        response = requests.get(GIST_URL)
+        if response.status_code == 200:
+            gist_data = response.json()
+            file_content = gist_data["files"]["schichtplan_data.json"]["content"]
+            return json.loads(file_content)
+    except Exception:
+        pass
     return {"daily_announcement": "", "shifts": {}}
 
 def save_all_data(data):
-    with open(DATA_FILE, "w") as f:
-        json.dump(data, f)
+    try:
+        payload = {
+            "files": {
+                "schichtplan_data.json": {
+                    "content": json.dumps(data)
+                }
+            }
+        }
+        # We send it directly over the public web requests
+        requests.patch(GIST_URL, json=payload)
+    except Exception:
+        pass
 
-# Initialize and load data
+# Initialize and load data from the internet storage cloud
 app_data = load_all_data()
 
 # Display announcement banner
