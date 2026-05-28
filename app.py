@@ -5,22 +5,49 @@ import datetime
 st.set_page_config(page_title="Tankstelle Schichtplan", layout="centered")
 st.title("⛽ Tankstelle Schichtplan")
 
-mitarbeiter = ["Frei/offen", "Marcus", "Anschi", "Armin Seidl", "Ecaterina Murzacova", "Sabine Fischer", "zicke", "Christina", "Blbas Danar"]
+mitarbeiter = [
+    "Frei/offen",
+    "Marcus",
+    "Anschi",
+    "Armin Seidl",
+    "Ecaterina Murzacova",
+    "Sabine Fischer",
+    "zicke",
+    "Christina",
+    "Blbas Danar"
+]
 shifts = ["Frühschicht", "Spätschicht"]
 
-# 1. SMART DATABASE SWITCH: Use cloud online, or local memory if offline
+# 1. DATABASE & LOGIN SYSTEM SETUP
 if "local_fallback_db" not in st.session_state:
     st.session_state.local_fallback_db = {}
 
+if "is_logged_in" not in st.session_state:
+    st.session_state.is_logged_in = False
+
 db_online = None
 try:
-    # Try connecting to the internet database
     db_online = st.connection("kv")
 except Exception:
-    # If offline/local, this prevents the "SecretsNotFoundError" crash
     pass
 
-# 2. Week Selection (Allows looking at different weeks)
+# 2. FETCH DAILY ANNOUNCEMENT (Shows at the very top of the app)
+announcement_key = "daily_announcement"
+current_announcement = ""
+
+if db_online is not None:
+    try:
+        current_announcement = db_online.get(announcement_key) or ""
+    except Exception:
+        current_announcement = st.session_state.local_fallback_db.get(announcement_key, "")
+else:
+    current_announcement = st.session_state.local_fallback_db.get(announcement_key, "")
+
+# Display the announcement as a nice colored alert header if it exists
+if current_announcement:
+    st.info(f"📢 **Wichtige Mitteilung:**\n\n{current_announcement}")
+
+# 3. WEEK SELECTION
 today = datetime.date.today()
 current_monday = today - datetime.timedelta(days=today.weekday())
 
@@ -28,7 +55,6 @@ st.write("### 📅 Woche auswählen")
 selected_monday = st.date_input("Wähle den Montag der Schichtwoche:", current_monday)
 selected_monday = selected_monday - datetime.timedelta(days=selected_monday.weekday())
 
-# Generate dates for that specific week
 days_de = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 date_strings = []
 for i in range(7):
@@ -37,7 +63,7 @@ for i in range(7):
 
 week_key = f"week_{selected_monday.strftime('%Y_%m_%d')}"
 
-# 3. Fetch data based on whether we are online or offline
+# 4. FETCH SHIFT DATA
 saved_data = None
 if db_online is not None:
     try:
@@ -54,25 +80,38 @@ else:
     df = pd.DataFrame.from_dict(saved_data, orient="index", columns=shifts)
     df.index = date_strings
 
-# 4. Access Control Sidebar
+# 5. ACCESS CONTROL SIDEBAR (Login / Logout)
 with st.sidebar:
-    st.header("🔑 Admin Login")
-    user_role = st.selectbox("Wer bist du?", ["Mitarbeiter (Nur Anschauen)", "Marcus (Manager)", "Blbas Danar"])
-    password = st.text_input("Passwort eingeben", type="password")
+    st.header("🔑 Admin Area")
+    if st.session_state.is_logged_in:
+        st.success("Eingeloggt als Admin")
+        if st.button("🔴 Logout / Sperren"):
+            st.session_state.is_logged_in = False
+            st.rerun()
+    else:
+        user_role = st.selectbox("Wer bist du?", ["Mitarbeiter (Nur Anschauen)", "Marcus (Manager)", "Blbas Danar"])
+        password = st.text_input("Passwort eingeben", type="password")
 
-has_access = False
-if user_role == "Marcus (Manager)" and password == "marcus2026":
-    has_access = True
-elif user_role == "Blbas Danar" and password == "danar2026":
-    has_access = True
+        if user_role == "Marcus (Manager)" and password == "Tiger2026":
+            st.session_state.is_logged_in = True
+            st.rerun()
+        elif user_role == "Blbas Danar" and password == "dany_de":
+            st.session_state.is_logged_in = True
+            st.rerun()
 
-# 5. Editing View
-if has_access:
-    st.info(f"Du bearbeitest gerade die Woche vom {selected_monday.strftime('%d.%m.%Y')}")
+# 6. ADMIN EDITING VIEW
+if st.session_state.is_logged_in:
+    st.markdown("---")
+    st.subheader("🛠️ Admin-Optionen")
+
+    # Text area for Marcus to change the announcement board
+    new_announcement = st.text_area("📢 Ankündigung für das Team bearbeiten:", value=current_announcement)
+
     with st.form("schicht_form"):
+        st.write(f"### Schichten bearbeiten für: {selected_monday.strftime('%d.%m.%Y')}")
         updated_data = {}
         for day in date_strings:
-            st.write(f"### {day}")
+            st.write(f"**{day}**")
             col1, col2 = st.columns(2)
 
             current_f = df.loc[day, "Frühschicht"] if day in df.index else "Frei/offen"
@@ -85,20 +124,22 @@ if has_access:
 
             updated_data[day] = [f_select, s_select]
 
-        submit = st.form_submit_button("Plan für diese Woche online speichern")
+        submit = st.form_submit_button("Änderungen (Plan & Ankündigung) online speichern")
         if submit:
-            # Save to internet database if available, otherwise save to temporary local memory
             if db_online is not None:
                 try:
                     db_online.set(week_key, updated_data)
+                    db_online.set(announcement_key, new_announcement)
                 except Exception:
                     st.session_state.local_fallback_db[week_key] = updated_data
+                    st.session_state.local_fallback_db[announcement_key] = new_announcement
             else:
                 st.session_state.local_fallback_db[week_key] = updated_data
+                st.session_state.local_fallback_db[announcement_key] = new_announcement
 
-            st.toast("Erfolgreich gespeichert! 💾")
+            st.toast("Alles erfolgreich gespeichert! 💾")
             st.rerun()
 
-# 6. Public Screen for Everyone
+# 7. PUBLIC SCREEN FOR EVERYONE
 st.write(f"## 📋 Schichtplan für die Woche vom {selected_monday.strftime('%d.%m.%Y')}")
 st.dataframe(df, use_container_width=True)
